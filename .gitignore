@@ -1,3 +1,3 @@
-
-# YoYo AI version control directory
-.yoyo/
+dist
+node_modules
+*.swp
