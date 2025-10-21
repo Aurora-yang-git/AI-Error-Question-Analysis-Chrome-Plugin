@@ -1,12 +1,12 @@
 {
-  "name": "Chrome Prompt AI Demo",
-  "version": "0.2",
+  "name": "Question Analyzer",
+  "version": "0.4",
   "manifest_version": 3,
-  "description": "Try Chrome's built-in prompt API built with Gemini Nano.",
+  "description": "Automatically analyze questions on webpages and provide detailed explanations using AI.",
   "background": {
     "service_worker": "background.js"
   },
-  "permissions": ["sidePanel", "tabs", "scripting", "storage"],
+  "permissions": ["sidePanel", "tabs", "scripting", "storage", "offscreen"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "minimum_chrome_version": "138",
   "side_panel": {
@@ -19,6 +19,6 @@
       "48": "images/icon48.png",
       "128": "images/icon128.png"
     },
-    "default_title": "Open Chat Interface"
+    "default_title": "Analyze Question"
   }
 }
