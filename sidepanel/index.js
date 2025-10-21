@@ -1,18 +1,11 @@
 /* global LanguageModel */
 
-import DOMPurify from 'dompurify';
-import { marked } from 'marked';
+import { renderMarkdownWithLatex } from '../utils/markdown-renderer.js';
 
-const inputPrompt = document.body.querySelector('#input-prompt');
-const buttonPrompt = document.body.querySelector('#button-prompt');
 const buttonReset = document.body.querySelector('#button-reset');
 const elementResponse = document.body.querySelector('#response');
 const elementLoading = document.body.querySelector('#loading');
 const elementError = document.body.querySelector('#error');
-const sliderTemperature = document.body.querySelector('#temperature');
-const sliderTopK = document.body.querySelector('#top-k');
-const labelTemperature = document.body.querySelector('#label-temperature');
-const labelTopK = document.body.querySelector('#label-top-k');
 const pageInfoElement = document.body.querySelector('#page-info');
 const pageTitleElement = document.body.querySelector('#page-title');
 const pageUrlElement = document.body.querySelector('#page-url');
@@ -21,6 +14,7 @@ let session;
 let pageContent = '';
 let pageUrl = '';
 let pageTitle = '';
+let isAnalyzing = false;
 
 async function runPrompt(prompt, params) {
   try {
@@ -49,22 +43,9 @@ async function initDefaults() {
   const defaults = await LanguageModel.params();
   console.log('Model default:', defaults);
   if (!('LanguageModel' in self)) {
-    showResponse('Model not available');
+    showError('Language Model is not available in your browser');
     return;
   }
-  sliderTemperature.value = defaults.defaultTemperature;
-  // Pending https://issues.chromium.org/issues/367771112.
-  // sliderTemperature.max = defaults.maxTemperature;
-  if (defaults.defaultTopK > 3) {
-    // limit default topK to 3
-    sliderTopK.value = 3;
-    labelTopK.textContent = 3;
-  } else {
-    sliderTopK.value = defaults.defaultTopK;
-    labelTopK.textContent = defaults.defaultTopK;
-  }
-  sliderTopK.max = defaults.maxTopK;
-  labelTemperature.textContent = defaults.defaultTemperature;
 }
 
 initDefaults();
@@ -90,8 +71,6 @@ function updatePageContent(content, url, title) {
   pageTitle = title || '';
   
   console.log('=== updatePageContent called ===');
-  console.log('content type:', typeof content);
-  console.log('content value:', content);
   console.log('content length:', content ? content.length : 0);
   console.log('url:', url);
   console.log('title:', title);
@@ -101,16 +80,72 @@ function updatePageContent(content, url, title) {
     pageTitleElement.textContent = pageTitle;
     pageUrlElement.textContent = pageUrl;
     pageInfoElement.removeAttribute('hidden');
+    
+    // Automatically analyze when content is updated
+    analyzeQuestion();
   } else {
     pageInfoElement.setAttribute('hidden', '');
+    showError('No content available to analyze. Please navigate to a webpage with a question.');
+  }
+}
+
+async function analyzeQuestion() {
+  if (isAnalyzing) {
+    console.log('Already analyzing, skipping...');
+    return;
   }
   
-  console.log('Page content updated:', {
-    hasContent: !!pageContent,
-    url: pageUrl,
-    title: pageTitle,
-    contentLength: pageContent.length
-  });
+  if (!pageContent) {
+    showError('No content available to analyze.');
+    return;
+  }
+  
+  isAnalyzing = true;
+  showLoading();
+  
+  try {
+    console.log('=== Starting Question Analysis ===');
+    console.log('pageContent length:', pageContent.length);
+    
+    // Build analysis prompt
+    const analysisPrompt = `You are an expert tutor analyzing a student's incorrect answer to a question.
+
+IMPORTANT: The webpage may contain multiple questions. Please analyze ONLY THE FIRST QUESTION you find. Ignore any other questions on the page.
+
+Webpage content:
+${pageContent}
+
+Please analyze the FIRST QUESTION ONLY and provide:
+1. **Question Summary**: Briefly describe what the first question is asking
+2. **Student's Answer**: Identify which option the student selected (if mentioned)
+3. **Correct Answer**: State the correct answer
+4. **Why Student Was Wrong**: Explain the misconception or error in the student's thinking
+5. **Detailed Explanation**: Provide a clear, step-by-step explanation of why the correct answer is right
+6. **Key Concepts**: List the important concepts the student should understand
+
+If you notice multiple questions on the page, acknowledge this but focus your analysis entirely on the first complete question you identify.
+
+Format your response in clear sections with headers. Be encouraging and educational.`;
+    
+    console.log('Prompt length:', analysisPrompt.length);
+    
+    const params = {
+      initialPrompts: [
+        { role: 'system', content: 'You are an expert tutor who helps students understand their mistakes and learn from them. Provide clear, detailed, and encouraging explanations.' }
+      ],
+      temperature: 0.7,
+      topK: 3,
+      outputLanguage: 'en'
+    };
+    
+    const response = await runPrompt(analysisPrompt, params);
+    showResponse(response);
+  } catch (e) {
+    console.error('Analysis failed:', e);
+    showError('Failed to analyze the question: ' + e.message);
+  } finally {
+    isAnalyzing = false;
+  }
 }
 
 buttonReset.addEventListener('click', () => {
@@ -119,65 +154,10 @@ buttonReset.addEventListener('click', () => {
   hide(elementResponse);
   reset();
   buttonReset.setAttribute('disabled', '');
-});
-
-sliderTemperature.addEventListener('input', (event) => {
-  labelTemperature.textContent = event.target.value;
-  reset();
-});
-
-sliderTopK.addEventListener('input', (event) => {
-  labelTopK.textContent = event.target.value;
-  reset();
-});
-
-inputPrompt.addEventListener('input', () => {
-  if (inputPrompt.value.trim()) {
-    buttonPrompt.removeAttribute('disabled');
-  } else {
-    buttonPrompt.setAttribute('disabled', '');
-  }
-});
-
-buttonPrompt.addEventListener('click', async () => {
-  const prompt = inputPrompt.value.trim();
-  showLoading();
-  try {
-    // Build full prompt with page content
-    let fullPrompt = prompt;
-    
-    console.log('=== Debug Info ===');
-    console.log('pageContent length:', pageContent ? pageContent.length : 0);
-    console.log('pageTitle:', pageTitle);
-    console.log('pageUrl:', pageUrl);
-    console.log('Has pageContent:', !!pageContent);
-    
-    if (pageContent) {
-      fullPrompt = `Current webpage information:
-Title: ${pageTitle}
-URL: ${pageUrl}
-
-Page content:
-${pageContent}
-
-User question: ${prompt}`;
-      console.log('Full prompt length:', fullPrompt.length);
-    } else {
-      console.log('No page content available, using prompt only');
-    }
-    
-    const params = {
-      initialPrompts: [
-        { role: 'system', content: 'You are a helpful and friendly assistant. When webpage content is provided, please answer questions based on that content. ' }
-      ],
-      temperature: sliderTemperature.value,
-      topK: sliderTopK.value,
-      outputLanguage: 'en'
-    };
-    const response = await runPrompt(fullPrompt, params);
-    showResponse(response);
-  } catch (e) {
-    showError(e);
+  
+  // Re-analyze after reset
+  if (pageContent) {
+    setTimeout(() => analyzeQuestion(), 100);
   }
 });
 
@@ -191,7 +171,8 @@ function showLoading() {
 function showResponse(response) {
   hide(elementLoading);
   show(elementResponse);
-  elementResponse.innerHTML = DOMPurify.sanitize(marked.parse(response));
+  elementResponse.innerHTML = renderMarkdownWithLatex(response);
+  buttonReset.removeAttribute('disabled');
 }
 
 function showError(error) {
@@ -199,6 +180,7 @@ function showError(error) {
   hide(elementResponse);
   hide(elementLoading);
   elementError.textContent = error;
+  buttonReset.setAttribute('disabled', '');
 }
 
 function show(element) {

@@ -1,16 +1,47 @@
-# On-device AI with Gemini Nano
+# Question Analyzer
 
-This sample demonstrates how to use the Gemini Nano prompt API in Chrome Extensions. To learn more about the API, head over to [Built-in AI on developer.chrome.com](https://developer.chrome.com/docs/extensions/ai/prompt-api).
+A Chrome extension that automatically analyzes mathematical questions on webpages and provides detailed explanations using AI.
 
-## Overview
+## Features
 
-The extension provides a chat interface using the Prompt API with Chrome's built-in Gemini Nano model.
+- **Automatic Analysis**: Analyzes questions as soon as you visit a webpage
+- **Persistent Results**: Analysis results are cached and persist across tab switches
+- **Mathematical Rendering**: Properly renders LaTeX formulas and mathematical expressions
+- **Floating Panel**: Displays analysis results in a convenient floating panel on the page
+- **Side Panel**: Additional analysis tools available in the Chrome side panel
 
-## Running this extension
+## Installation
 
-1. Clone this repository.
-1. Run `npm install` in the project directory.
-1. Run `npm run build` in the project directory to build the extension.
-1. Load the newly created `dist` directory in Chrome as an [unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked).
-1. Click the extension icon.
-1. Interact with the Prompt API in the sidebar.
+1. Download or clone this repository
+2. Open Chrome and go to `chrome://extensions/`
+3. Enable "Developer mode" in the top right
+4. Click "Load unpacked" and select the `dist` folder
+5. The extension will be installed and ready to use
+
+## Usage
+
+1. **Automatic Analysis**: Simply visit any webpage with mathematical questions
+2. **View Results**: Analysis results appear in a floating panel in the bottom-right corner
+3. **Switch Tabs**: Results persist when you switch between tabs
+4. **Side Panel**: Click the extension icon to open additional tools
+
+## Requirements
+
+- Chrome 138 or higher
+- Gemini Nano enabled in `chrome://flags`
+
+## Development
+
+```bash
+# Install dependencies
+npm install
+
+# Build the extension
+npm run build
+
+# The built extension will be in the `dist` folder
+```
+
+## Privacy
+
+This extension processes webpage content locally using Chrome's on-device AI capabilities. No data is sent to external servers.
