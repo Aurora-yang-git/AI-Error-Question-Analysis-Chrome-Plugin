@@ -100,8 +100,6 @@ class MisconceptionsViewer {
         ${misconception.count>1?`<div class="badge-dup">×${misconception.count}</div>`:''}
       </div>
       
-      ${this.renderAnswers(misconception.studentAnswer, misconception.correctAnswer)}
-      
       ${misconception.misconception ? this.renderMisconceptionBox(misconception.misconception) : ''}
       
       ${misconception.knowledgePoints && misconception.knowledgePoints.length > 0 ? this.renderKnowledgePoints(misconception.knowledgePoints) : ''}
@@ -128,27 +126,6 @@ class MisconceptionsViewer {
     }, 100);
     
     return card;
-  }
-  
-  renderAnswers(studentAnswer, correctAnswer) {
-    if (!studentAnswer && !correctAnswer) return '';
-    
-    return `
-      <div class="misconception-answers">
-        ${studentAnswer ? `
-          <div class="answer-item">
-            <span class="answer-label">Your Answer:</span>
-            <span class="answer-value your-answer">${this.escapeHtml(studentAnswer)}</span>
-          </div>
-        ` : ''}
-        ${correctAnswer ? `
-          <div class="answer-item">
-            <span class="answer-label">Correct Answer:</span>
-            <span class="answer-value correct-answer">${this.escapeHtml(correctAnswer)}</span>
-          </div>
-        ` : ''}
-      </div>
-    `;
   }
   
   renderMisconceptionBox(misconception) {

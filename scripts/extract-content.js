@@ -155,21 +155,39 @@ function convertHtmlToMarkdown(htmlContent) {
 // Function to find the visible question root container
 function findVisibleQuestionRoot(document) {
   console.log('Extract-content: Searching for visible question root...');
-  
+
   // 1. 找到页面上所有可能的题目块
   const allQuestionBlocks = document.querySelectorAll('.teacher-item-preview, .PerformanceItem.question-preview-player');
   console.log('Extract-content: Found', allQuestionBlocks.length, 'potential question blocks');
-  
-  // 2. 遍历它们，找到那个"可见"的
+
+  // 2. 优先选择包含当前选中答案的容器
+  // 这可以更准确地找到用户正在查看的题目
+  const selectedOptions = document.querySelectorAll('.mcq-option[aria-selected="true"], .lrn-mcq-option[aria-selected="true"], .mcq-option.selected, .lrn-mcq-option.selected');
+  console.log('Extract-content: Found', selectedOptions.length, 'selected options');
+
+  if (selectedOptions.length > 0) {
+    const selectedOption = selectedOptions[0];
+    console.log('Extract-content: Selected option found:', selectedOption);
+
+    // 向上查找包含这个选项的题目容器
+    for (const block of allQuestionBlocks) {
+      if (block.contains(selectedOption)) {
+        console.log('Extract-content: Found question root containing selected option:', block);
+        return block;
+      }
+    }
+  }
+
+  // 3. 如果没找到包含选中选项的容器，回退到原来的可见性检查
   for (const block of allQuestionBlocks) {
     // offsetParent !== null 是最准的判断元素是否可见的方法
     if (block.offsetParent !== null) {
-      console.log('Extract-content: Found visible question root:', block);
+      console.log('Extract-content: Found visible question root (fallback):', block);
       return block;
     }
   }
-  
-  // 3. 如果找不到，返回 null
+
+  // 4. 如果找不到，返回 null
   console.log('Extract-content: No visible question root found');
   return null;
 }
@@ -182,23 +200,35 @@ function detectUserAnswer(document) {
   let correctAnswer = null;
   let root = null;
   
-  // Determine the current question root that contains the options list
-  let optionNodes = Array.from(document.querySelectorAll('.mcq-option'));
+  // Step 0: Try to find the visible question root first (scoping fix)
+  const visibleRoot = findVisibleQuestionRoot(document);
   let lrnMode = false;
-  if (optionNodes.length === 0) {
-    // Learnosity structure fallback
-    optionNodes = Array.from(document.querySelectorAll('.lrn-mcq-option'));
-    lrnMode = optionNodes.length > 0;
-  }
-  if (optionNodes.length > 0) {
-    // climb up until a container that groups multiple .mcq-option
-    let container = optionNodes[0].parentElement;
-    while (container && container.querySelectorAll('.mcq-option').length < 2) {
-      container = container.parentElement;
-    }
-    root = container || document;
+  
+  if (visibleRoot) {
+    root = visibleRoot;
+    console.log('Extract-content: Using visible question root for scoping');
+    // Check if it's Learnosity mode within the visible root
+    const lrnOptions = visibleRoot.querySelectorAll('.lrn-mcq-option');
+    lrnMode = lrnOptions.length > 0;
   } else {
-    root = document;
+    // Fallback: Determine the current question root that contains the options list
+    console.log('Extract-content: No visible root found, falling back to option-based detection');
+    let optionNodes = Array.from(document.querySelectorAll('.mcq-option'));
+    if (optionNodes.length === 0) {
+      // Learnosity structure fallback
+      optionNodes = Array.from(document.querySelectorAll('.lrn-mcq-option'));
+      lrnMode = optionNodes.length > 0;
+    }
+    if (optionNodes.length > 0) {
+      // climb up until a container that groups multiple .mcq-option
+      let container = optionNodes[0].parentElement;
+      while (container && container.querySelectorAll('.mcq-option').length < 2) {
+        container = container.parentElement;
+      }
+      root = container || document;
+    } else {
+      root = document;
+    }
   }
   const optionSelector = lrnMode ? '.lrn-mcq-option' : '.mcq-option';
   console.log('Extract-content: Using scoped root for detection with options count:', (root.querySelectorAll(optionSelector)||[]).length);
@@ -405,28 +435,91 @@ function extractRationales(document) {
   console.log('Extract-content: Extracting rationales...');
   const rationales = [];
   // Scope to the same root as options to align order with A–D
+  // Use the same logic as detectUserAnswer to ensure consistency
   let root = null;
-  const optionNodes = Array.from(document.querySelectorAll('.mcq-option'));
-  if (optionNodes.length > 0) {
-    let container = optionNodes[0].parentElement;
-    while (container && container.querySelectorAll('.mcq-option').length < 2) {
-      container = container.parentElement;
-    }
-    root = container || document;
+  
+  // Step 0: Try to find the visible question root first (same as detectUserAnswer)
+  const visibleRoot = findVisibleQuestionRoot(document);
+  if (visibleRoot) {
+    root = visibleRoot;
+    console.log('Extract-content: Using visible question root for rationale extraction');
   } else {
-    root = document;
+    // Fallback: Use the same fallback logic as detectUserAnswer
+    console.log('Extract-content: No visible root found for rationales, falling back to option-based detection');
+    const optionNodes = Array.from(document.querySelectorAll('.mcq-option'));
+    if (optionNodes.length > 0) {
+      let container = optionNodes[0].parentElement;
+      while (container && container.querySelectorAll('.mcq-option').length < 2) {
+        container = container.parentElement;
+      }
+      root = container || document;
+    } else {
+      root = document;
+    }
   }
-  const contents = root.querySelectorAll('.LearnosityDistractor .content');
+  
+  // Log root container info for debugging
+  console.log('Extract-content: Root container:', root.tagName, root.className || '(no class)', root.id || '(no id)');
+
+  // First, try to find rationales by associating them with specific options
+  const optionSelectors = ['.mcq-option', '.lrn-mcq-option'];
+  let allOptions = [];
+  optionSelectors.forEach(selector => {
+    const options = Array.from(root.querySelectorAll(selector));
+    allOptions = allOptions.concat(options);
+  });
+
+  console.log('Extract-content: Found', allOptions.length, 'options in root container');
+
+  // Extract rationales by finding the distractor containers associated with options
   const letters = ['A', 'B', 'C', 'D', 'E'];
+  let rationaleIndex = 0;
+
+  allOptions.forEach((option, optionIndex) => {
+    // Look for rationale containers near this option
+    const distractor = option.closest('.LearnosityDistractor');
+    if (distractor) {
+      const contentEl = distractor.querySelector('.content');
+      if (contentEl) {
+        const text = contentEl.textContent ? contentEl.textContent.trim() : '';
+        if (text) {
+          const letter = letters[rationaleIndex] || String.fromCharCode(65 + rationaleIndex);
+          rationales.push({ answer: letter, rationale: text });
+          console.log('Extract-content: Rationale mapped to', letter, 'via option association');
+          rationaleIndex += 1;
+        }
+      }
+    }
+  });
+
+  // If we found rationales through options, return them
+  if (rationales.length > 0) {
+    console.log('Extract-content: Extracted', rationales.length, 'rationales via option association');
+    return rationales;
+  }
+
+  // Fallback: If no option-associated rationales found, try the broader search but limit it
+  console.log('Extract-content: No option-associated rationales found, trying broader search');
+  const contents = root.querySelectorAll('.LearnosityDistractor .content');
+  console.log('Extract-content: Found', contents.length, 'potential rationales in root container');
+
+  // Limit to a reasonable number (usually A-E for multiple choice)
+  const maxRationales = Math.min(contents.length, 5);
   let idx = 0;
-  contents.forEach((contentEl) => {
+
+  for (const contentEl of contents) {
+    if (idx >= maxRationales) break;
+
     const text = contentEl.textContent ? contentEl.textContent.trim() : '';
-    if (!text) return;
+    if (!text) continue;
+
     const letter = letters[idx] || String.fromCharCode(65 + idx);
     rationales.push({ answer: letter, rationale: text });
-    console.log('Extract-content: Rationale mapped to', letter);
+    console.log('Extract-content: Rationale mapped to', letter, '- fallback method');
     idx += 1;
-  });
+  }
+
+  console.log('Extract-content: Extracted', rationales.length, 'rationales from root container');
   return rationales;
 }
 

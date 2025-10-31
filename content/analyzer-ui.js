@@ -278,21 +278,6 @@ class AnalyzerUI {
   buildAnalysisHTML(analysisData, fullMarkdown) {
     let html = '';
     
-    // Add student answer and correct answer section
-    if (analysisData.studentAnswer || analysisData.correctAnswer) {
-      html += '<div class="qa-answer-summary">';
-      
-      if (analysisData.studentAnswer) {
-        html += `<div class="qa-answer-item"><span class="qa-label">Your Answer:</span> <span class="qa-answer-value">${analysisData.studentAnswer}</span></div>`;
-      }
-      
-      if (analysisData.correctAnswer) {
-        html += `<div class="qa-answer-item"><span class="qa-label">Correct Answer:</span> <span class="qa-correct">${analysisData.correctAnswer}</span></div>`;
-      }
-      
-      html += '</div>';
-    }
-    
     // Add misconception highlight if present
     if (analysisData.misconception) {
       html += `<div class="qa-misconception-box">
@@ -315,14 +300,10 @@ class AnalyzerUI {
     let cleanedMarkdown = fullMarkdown;
     
     // Remove Student Answer section
-    if (analysisData.studentAnswer) {
-      cleanedMarkdown = cleanedMarkdown.replace(/\*\*Student Answer\*\*:\s*[^\n]+\n?/g, '');
-    }
+    cleanedMarkdown = cleanedMarkdown.replace(/\*\*Student Answer\*\*:\s*[^\n]+\n?/g, '');
     
     // Remove Correct Answer section
-    if (analysisData.correctAnswer) {
-      cleanedMarkdown = cleanedMarkdown.replace(/\*\*Correct Answer\*\*:\s*[^\n]+\n?/g, '');
-    }
+    cleanedMarkdown = cleanedMarkdown.replace(/\*\*Correct Answer\*\*:\s*[^\n]+\n?/g, '');
     
     // Remove Misconception section
     if (analysisData.misconception) {
@@ -347,18 +328,14 @@ class AnalyzerUI {
     
     // Add feedback and save buttons
     html += `<div class="qa-feedback-section">
-      <div class="qa-label">Was this helpful?</div>
-      <div class="qa-feedback-buttons">
+      <div class="qa-action-buttons">
         <button class="qa-feedback-btn qa-up" title="Helpful">
           👍
         </button>
         <button class="qa-feedback-btn qa-down" title="Not helpful">
           👎
         </button>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
         <button class="qa-save-btn"><span class="star-icon">☆</span> Save</button>
-        <button class="qa-btn qa-next-btn" title="Analyze another">Next Step</button>
       </div>
     </div>`;
     
@@ -369,7 +346,6 @@ class AnalyzerUI {
     const upBtn = this.panel.querySelector('.qa-up');
     const downBtn = this.panel.querySelector('.qa-down');
     const saveBtn = this.panel.querySelector('.qa-save-btn');
-    const nextBtn = this.panel.querySelector('.qa-next-btn');
     
     if (upBtn) {
       upBtn.addEventListener('click', () => this.handleFeedback(true));
@@ -381,10 +357,6 @@ class AnalyzerUI {
     
     if (saveBtn) {
       saveBtn.addEventListener('click', () => this.handleSave());
-    }
-
-    if (nextBtn) {
-      nextBtn.addEventListener('click', () => this.reanalyze());
     }
   }
   
