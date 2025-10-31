@@ -4,6 +4,13 @@ node_modules
 
 # YoYo AI version control directory
 .yoyo
+.vscode/
+.cursor/
 
-# YoYo AI version control directory
-.yoyo/
+.DS_Store
+Thumbs.db
+
+npm-debug.log*
+yarn-error.log
+
+supabase-config.js
