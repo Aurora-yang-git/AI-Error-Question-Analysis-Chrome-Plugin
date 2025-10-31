@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saved Misconceptions - Question Analyzer</title>
+    <link rel="stylesheet" href="../style/base.css">
+    <link rel="stylesheet" href="misconceptions.css">
+    <link rel="stylesheet" href="../node_modules/katex/dist/katex.min.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📚 Saved Misconceptions</h1>
+            <p class="subtitle">Review your saved mistakes and learn from them</p>
+        </header>
+        
+        <div class="controls">
+            <button id="clearAllBtn" class="btn-danger">Clear All</button>
+            <button id="refreshBtn" class="btn-secondary">Refresh</button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Loading misconceptions...</p>
+        </div>
+        
+        <div id="emptyState" class="empty-state" style="display: none;">
+            <div class="empty-icon">📝</div>
+            <h2>No misconceptions saved yet</h2>
+            <p>Start analyzing questions and save misconceptions to see them here.</p>
+        </div>
+        
+        <div id="misconceptionsList" class="misconceptions-list">
+            <!-- Misconceptions will be rendered here -->
+        </div>
+    </div>
+    
+    <script src="../utils/markdown-renderer.js" type="module"></script>
+    <script src="../utils/hash.js" type="module"></script>
+    <script src="misconceptions.js" type="module"></script>
+</body>
+</html>
+
+
+
+

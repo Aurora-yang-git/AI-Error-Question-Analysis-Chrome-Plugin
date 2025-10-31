@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Question Analyzer</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <div class="header">
+            <h1>🔍 Question Analyzer</h1>
+        </div>
+        
+        <div class="content">
+            <!-- Auto-scan toggle -->
+            <div class="setting-item">
+                <label class="toggle-container">
+                    <input type="checkbox" id="autoScanToggle">
+                    <span class="toggle-slider"></span>
+                    <span class="toggle-label">Enable Auto-Scan</span>
+                </label>
+                <p class="setting-description">Automatically analyze questions when visiting pages</p>
+            </div>
+            
+            <!-- Status indicator -->
+            <div class="status-section" id="statusSection" style="display: none;">
+                <div class="status-indicator" id="statusIndicator">
+                    <div class="spinner"></div>
+                    <span id="statusText">Analyzing...</span>
+                </div>
+            </div>
+            
+            <!-- Main action button -->
+            <button id="analyzeBtn" class="primary-btn">
+                <span class="btn-icon">📊</span>
+                Analyze Current Question
+            </button>
+            
+            <!-- Quick actions -->
+            <div class="quick-actions">
+                <button id="viewMisconceptionsBtn" class="secondary-btn">
+                    <span class="btn-icon">📚</span>
+                    View Misconceptions
+                </button>
+                <button id="settingsBtn" class="secondary-btn">
+                    <span class="btn-icon">⚙️</span>
+                    Settings
+                </button>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p class="version">v0.5 - Misconception Focus</p>
+        </div>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
+

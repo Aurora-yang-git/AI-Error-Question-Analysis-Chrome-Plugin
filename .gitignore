@@ -4,3 +4,6 @@ node_modules
 
 # YoYo AI version control directory
 .yoyo
+
+# YoYo AI version control directory
+.yoyo/

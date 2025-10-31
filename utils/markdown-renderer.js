@@ -19,31 +19,38 @@ marked.use({
         textString = String(text || '');
       }
       
+      // Pre-process LaTeX to handle common issues
+      textString = preprocessLatex(textString);
+      
       // Handle display math $$...$$
       textString = textString.replace(/\$\$(.+?)\$\$/g, (match, formula) => {
         try {
-          return katex.renderToString(formula, { 
+          const cleanFormula = formula.trim();
+          return katex.renderToString(cleanFormula, { 
             displayMode: true, 
             throwOnError: false,
-            output: 'html'
+            output: 'html',
+            strict: false
           });
         } catch (e) {
-          console.error('KaTeX error (display):', e);
-          return `$$${formula}$$`;
+          console.error('KaTeX error (display):', e, 'Formula:', formula);
+          return `<span style="color: red;">LaTeX Error: ${e.message}</span><pre>$$${formula}$$</pre>`;
         }
       });
       
       // Handle inline math $...$
       textString = textString.replace(/\$(.+?)\$/g, (match, formula) => {
         try {
-          return katex.renderToString(formula, { 
+          const cleanFormula = formula.trim();
+          return katex.renderToString(cleanFormula, { 
             displayMode: false, 
             throwOnError: false,
-            output: 'html'
+            output: 'html',
+            strict: false
           });
         } catch (e) {
-          console.error('KaTeX error (inline):', e);
-          return `$${formula}$`;
+          console.error('KaTeX error (inline):', e, 'Formula:', formula);
+          return `<span style="color: red;">LaTeX Error: ${e.message}</span><pre>$${formula}$</pre>`;
         }
       });
       
@@ -51,6 +58,38 @@ marked.use({
     }
   }
 });
+
+// Pre-process LaTeX to fix common formatting issues
+function preprocessLatex(text) {
+  // First, protect [asy] code blocks from LaTeX processing
+  const asyBlocks = [];
+  let asyIndex = 0;
+  text = text.replace(/```asy[\s\S]*?```/g, (match) => {
+    const placeholder = `ASY_BLOCK_${asyIndex++}`;
+    asyBlocks.push(match);
+    return placeholder;
+  });
+  
+  // Fix common LaTeX spacing issues
+  text = text.replace(/\$\s*\\frac\s*\{([^}]+)\}\s*\{([^}]+)\}\s*\$/g, '$\\frac{$1}{$2}$');
+  text = text.replace(/\$\s*\\textbf\s*\{([^}]+)\}\s*\$/g, '$\\textbf{$1}$');
+  text = text.replace(/\$\s*\\qquad\s*\$/g, '$\\qquad$');
+  
+  // Fix broken LaTeX across lines
+  text = text.replace(/\$\s*\n\s*\$/g, '$$');
+  text = text.replace(/\$\s*\n\s*([^$]+?)\s*\n\s*\$/g, '$$$1$$');
+  
+  // Ensure proper spacing around LaTeX
+  text = text.replace(/([^$])\$([^$])/g, '$1 $2');
+  text = text.replace(/([^$])\$([^$])/g, '$1 $2');
+  
+  // Restore [asy] blocks
+  asyBlocks.forEach((block, index) => {
+    text = text.replace(`ASY_BLOCK_${index}`, block);
+  });
+  
+  return text;
+}
 
 /**
  * Render markdown content with LaTeX support

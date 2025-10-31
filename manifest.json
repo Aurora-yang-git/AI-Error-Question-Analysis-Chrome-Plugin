@@ -1,17 +1,20 @@
 {
   "name": "Question Analyzer",
-  "version": "0.4",
+  "version": "0.5",
   "manifest_version": 3,
-  "description": "Automatically analyze questions on webpages and provide detailed explanations using AI.",
+  "description": "Analyze questions to identify misconceptions and provide step-by-step explanations using AI.",
   "background": {
     "service_worker": "background.js"
   },
+  "web_accessible_resources": [
+    {
+      "resources": ["misconceptions/misconceptions.html", "settings.html"],
+      "matches": ["<all_urls>"]
+    }
+  ],
   "permissions": ["sidePanel", "tabs", "scripting", "storage", "offscreen"],
   "host_permissions": ["http://*/*", "https://*/*"],
   "minimum_chrome_version": "138",
-  "side_panel": {
-    "default_path": "sidepanel/index.html"
-  },
   "action": {
     "default_icon": {
       "16": "images/icon16.png",
@@ -19,6 +22,7 @@
       "48": "images/icon48.png",
       "128": "images/icon128.png"
     },
-    "default_title": "Analyze Question"
+    "default_title": "Analyze Question",
+    "default_popup": "popup/popup.html"
   }
 }
