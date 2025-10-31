@@ -151,13 +151,87 @@ class MisconceptionsViewer {
     if (!analysis) return '<p>No analysis available.</p>';
     
     try {
+      // Clean up the analysis text - remove any existing pre/code tags that might wrap everything
+      let cleanedAnalysis = String(analysis).trim();
+      
+      // Remove "💡 Misconception Identified" or similar headers (handle various formats and positions)
+      cleanedAnalysis = cleanedAnalysis.replace(/💡\s*Misconception\s+Identified[\s\n]*/gi, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/💡\s*Misconception[\s\n]*/gi, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/Misconception\s+Identified[\s\n]*/gi, '');
+      
+      // Remove feedback buttons (👍 👎) and Save button - match with surrounding whitespace
+      cleanedAnalysis = cleanedAnalysis.replace(/[\s\n]*👍[\s\n]*/g, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/[\s\n]*👎[\s\n]*/g, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/[\s\n]*[☆★]\s*Save[\s\n]*/gi, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/[\s\n]*Save[\s\n]*/gi, '');
+      
+      // Remove "Next Step" button text if present
+      cleanedAnalysis = cleanedAnalysis.replace(/[\s\n]*Next\s+Step[\s\n]*/gi, '');
+      
+      // Remove any standalone emoji or button text that might have been left
+      cleanedAnalysis = cleanedAnalysis.replace(/^[\s\n]*[💡👍👎☆★][\s\n]*/g, '');
+      
+      // Remove any HTML buttons or feedback elements
+      cleanedAnalysis = cleanedAnalysis.replace(/<button[^>]*>[\s\S]*?<\/button>/gi, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/<div[^>]*class="[^"]*feedback[^"]*"[\s\S]*?<\/div>/gi, '');
+      cleanedAnalysis = cleanedAnalysis.replace(/<div[^>]*class="[^"]*action[^"]*"[\s\S]*?<\/div>/gi, '');
+      
+      // If content is wrapped in <pre><code>, extract the inner content
+      const preCodeMatch = cleanedAnalysis.match(/<pre><code>([\s\S]*?)<\/code><\/pre>/);
+      if (preCodeMatch) {
+        cleanedAnalysis = preCodeMatch[1];
+      }
+      
+      // Also handle plain <pre> tags
+      const preMatch = cleanedAnalysis.match(/<pre>([\s\S]*?)<\/pre>/);
+      if (preMatch && !cleanedAnalysis.includes('<p>')) {
+        cleanedAnalysis = preMatch[1];
+      }
+      
+      // Clean up extra whitespace and empty lines
+      cleanedAnalysis = cleanedAnalysis.replace(/\n\s*\n\s*\n/g, '\n\n').trim();
+      
+      // If the content is now empty or only whitespace, return empty
+      if (!cleanedAnalysis || cleanedAnalysis.trim().length === 0) {
+        return '';
+      }
+      
       // Try to render as markdown with LaTeX
-      const html = renderMarkdownWithLatex(analysis);
+      const html = renderMarkdownWithLatex(cleanedAnalysis);
+      
+      // If the result is still wrapped in pre/code, try to extract it
+      if (html.includes('<pre><code>') && html.trim().startsWith('<pre><code>')) {
+        const extracted = html.match(/<pre><code>([\s\S]*?)<\/code><\/pre>/);
+        if (extracted) {
+          return '<div>' + renderMarkdownWithLatex(extracted[1]) + '</div>';
+        }
+      }
+      
       return html;
     } catch (error) {
       console.error('Error rendering markdown:', error);
-      // Fall back to escaped text
-      return '<pre>' + this.escapeHtml(analysis) + '</pre>';
+      // Fall back to plain text with proper formatting, not pre tag
+      let text = String(analysis || '').trim();
+      
+      // Remove unwanted content (same as above)
+      text = text.replace(/💡\s*Misconception\s+Identified[\s\n]*/gi, '');
+      text = text.replace(/💡\s*Misconception[\s\n]*/gi, '');
+      text = text.replace(/Misconception\s+Identified[\s\n]*/gi, '');
+      text = text.replace(/[\s\n]*👍[\s\n]*/g, '');
+      text = text.replace(/[\s\n]*👎[\s\n]*/g, '');
+      text = text.replace(/[\s\n]*[☆★]\s*Save[\s\n]*/gi, '');
+      text = text.replace(/[\s\n]*Save[\s\n]*/gi, '');
+      text = text.replace(/[\s\n]*Next\s+Step[\s\n]*/gi, '');
+      text = text.replace(/^[\s\n]*[💡👍👎☆★][\s\n]*/g, '');
+      
+      // Remove pre/code wrappers if present
+      const cleaned = text.replace(/<\/?pre><\/?code>/g, '').replace(/<\/?pre>/g, '').replace(/<\/?code>/g, '').trim();
+      
+      if (!cleaned || cleaned.length === 0) {
+        return '';
+      }
+      
+      return '<p style="white-space: pre-wrap; word-wrap: break-word;">' + this.escapeHtml(cleaned) + '</p>';
     }
   }
   
