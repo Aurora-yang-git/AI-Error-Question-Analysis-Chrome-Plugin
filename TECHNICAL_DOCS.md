@@ -1,120 +1,528 @@
+**Languages**: [English](TECHNICAL_DOCS.md) | [简体中文](docs/zh-CN/TECHNICAL_DOCS.md)
+
+---
+
 # Technical Documentation
 
-## Problem Statement
+## System Overview
 
-Students and learners often encounter complex mathematical problems on educational websites but lack immediate access to detailed explanations and step-by-step solutions. Traditional approaches require manual copying of problems to external AI tools, which is time-consuming and disrupts the learning flow. Additionally, mathematical formulas and LaTeX expressions need proper rendering to be truly helpful for understanding.
+Question Analyzer is a Chrome extension designed for AP course students. It automatically analyzes multiple-choice questions on College Board AP Classroom, using Chrome's built-in Gemini Nano AI model to identify student misconceptions and provide Socratic guidance to help students self-correct.
 
-## Solution Overview
+**Core Value**:
+- ✅ Local AI processing, privacy-safe
+- ✅ Customized analysis for 13 AP subjects
+- ✅ Deep reasoning based on College Board official explanations
+- ✅ Guided teaching, not direct answers
 
-The Question Analyzer Chrome extension addresses this problem by automatically analyzing mathematical questions directly on webpages and providing instant, detailed explanations. The extension uses Chrome's on-device AI capabilities to process content locally, ensuring privacy while delivering educational value.
+---
 
-## Key Features
+## 🎯 AI Analysis Core Technology (Detailed)
 
-### 1. Automatic Question Analysis
-- **Real-time Processing**: Automatically detects and analyzes mathematical questions as users browse educational websites
-- **Intelligent Content Extraction**: Uses advanced parsing to extract clean, structured content from complex webpages
-- **AI-Powered Explanations**: Provides detailed analysis including correct answers, common mistakes, and key concepts
+### 1. Offscreen Document Architecture
 
-### 2. Mathematical Formula Rendering
-- **LaTeX Support**: Properly renders mathematical expressions using KaTeX
-- **Inline and Display Math**: Supports both inline formulas ($...$) and display equations ($$...$$)
-- **Cross-Platform Compatibility**: Ensures formulas display correctly across different websites
+#### Why Offscreen Document is Needed?
+Chrome's `LanguageModel` API requires a DOM context to run, but Service Workers (background.js) don't have DOM. Therefore, a hidden offscreen document must be created to host the AI model.
 
-### 3. Persistent Analysis Results
-- **Smart Caching**: Stores analysis results locally to avoid redundant processing
-- **Tab Persistence**: Analysis results remain visible when switching between tabs
-- **Efficient Resource Usage**: Only re-analyzes when content changes or cache expires
+#### Lifecycle Management
+```javascript
+// background.js
+async function ensureOffscreenDocument() {
+  // Check if already exists
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes: ['OFFSCREEN_DOCUMENT']
+  });
+  
+  if (existingContexts.length > 0) {
+    return; // Already exists, reuse directly
+  }
+  
+  // Create new offscreen document
+  await chrome.offscreen.createDocument({
+    url: 'offscreen/offscreen.html',
+    reasons: ['DOM_SCRAPING'],
+    justification: 'Need DOM context for LanguageModel API'
+  });
+  
+  // Wait for initialization
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // Verify ready state
+  const pingResponse = await chrome.runtime.sendMessage({ action: 'ping' });
+  console.log('Offscreen ready:', pingResponse.ready);
+}
+```
 
-### 4. User-Friendly Interface
-- **Floating Panel**: Non-intrusive analysis display that doesn't interfere with webpage content
-- **Interactive Controls**: Minimize, reload, and close functionality for better user experience
-- **Responsive Design**: Adapts to different screen sizes and website layouts
+**Key Points**:
+- Singleton pattern: Created only once per extension lifecycle
+- Lazy initialization: Created only when AI analysis is first needed
+- Health check: Verified ready state via ping/pong mechanism
 
-## Chrome Extension APIs Used
+---
 
-### Core Extension APIs
-- **`chrome.scripting`**: Injects content extraction and UI scripts into webpages
-- **`chrome.tabs`**: Monitors tab events and manages tab-specific state
-- **`chrome.storage`**: Persists analysis results and user data locally
-- **`chrome.runtime`**: Handles message passing between extension components
-- **`chrome.offscreen`**: Manages offscreen document for AI processing
-- **`chrome.sidePanel`**: Provides additional analysis tools in Chrome's side panel
+### 2. LanguageModel API Integration
 
-### Web APIs
-- **`LanguageModel`**: Chrome's on-device AI API for question analysis
-- **`DOMPurify`**: Sanitizes HTML content for security
-- **`marked`**: Converts Markdown to HTML with custom LaTeX support
-- **`KaTeX`**: Renders mathematical formulas and expressions
+#### Session Creation and Configuration
+```javascript
+// offscreen/offscreen.js
+let session = null; // Global singleton session
 
-## Technical Architecture
+async function analyzeQuestion(content, context) {
+  // Check API availability
+  if (!('LanguageModel' in self)) {
+    throw new Error('LanguageModel API not available. Enable Gemini Nano in chrome://flags');
+  }
 
-### Background Script (`background.js`)
-Orchestrates the entire analysis workflow by:
-- Extracting webpage content using `chrome.scripting.executeScript`
-- Injecting the analyzer UI and CSS into pages
-- Managing cache with `chrome.storage.local` for persistence
-- Coordinating with offscreen document for AI processing
-- Handling tab events and ensuring seamless user experience
+  // Create or reuse session
+  if (!session) {
+    const params = {
+      temperature: 0.7,    // Control output randomness (0.0-1.0)
+      topK: 3,             // Consider top K candidate words when sampling
+      outputLanguage: 'en' // Output language
+    };
+    session = await LanguageModel.create(params);
+  }
+  
+  // Use session for inference
+  const result = await session.prompt(prompt);
+  return result;
+}
+```
 
-### Content Script (`content/analyzer-ui.js`)
-Provides the user interface by:
-- Creating and managing the floating analysis panel
-- Handling messages from the background script
-- Rendering Markdown content with LaTeX support
-- Managing panel state (minimize, close, reload functionality)
+**Parameter Details**:
+- `temperature: 0.7` - Balances creativity vs consistency (0.6-0.8 recommended for educational scenarios)
+- `topK: 3` - Limits candidate words count, improves output quality
+- `outputLanguage: 'en'` - Force English output (consistent with AP exam language)
 
-### Offscreen Document (`offscreen/offscreen.js`)
-Handles AI model interactions by:
-- Integrating with Chrome's `LanguageModel` API
-- Processing analysis prompts and generating responses
-- Managing AI session lifecycle and error handling
+#### Session Lifecycle Management
+- **Creation Timing**: On first `analyzeQuestion` call
+- **Reuse Strategy**: Multiple analyses share the same session, improves performance
+- **Destruction Timing**: Destroyed and nullified on error, recreated next time
+- **Error Recovery**:
+```javascript
+catch (error) {
+  if (session) {
+    session.destroy();
+    session = null; // Ensure recreation next time
+  }
+  throw error;
+}
+```
 
-### Content Extraction (`scripts/extract-content.js`)
-Extracts clean content from webpages by:
-- Using Defuddle library for intelligent content parsing
-- Converting HTML to Markdown using Turndown
-- Preserving LaTeX formulas and mathematical expressions
-- Cleaning and formatting content for optimal AI processing
+---
 
-### Shared Utilities (`utils/markdown-renderer.js`)
-Ensures consistent rendering by:
-- Configuring Marked.js for LaTeX support
-- Integrating KaTeX for mathematical formula rendering
-- Applying DOMPurify sanitization for security
-- Providing cross-component rendering consistency
+### 3. Prompt Engineering
 
-## Data Flow
+#### Complete Prompt Template
+```javascript
+const prompt = `You are an expert AI tutor analyzing a student's answer to identify and clarify misconceptions in the subject of ${subject}.
 
-1. **Page Load**: Background script detects tab activation/update
-2. **Content Extraction**: Executes extraction script to get clean content
-3. **UI Injection**: Injects analyzer UI and CSS into the page
-4. **Cache Check**: Checks for existing analysis results
-5. **AI Processing**: If no cache, sends content to offscreen document
-6. **Result Display**: Shows analysis results in floating panel
-7. **Persistence**: Stores results in `chrome.storage.local`
+Question content:
+${content}
+
+Correct Answer: ${correctAnswer}
+Student Answer: ${studentAnswer}
+
+College Board Explanation (for reference only):
+A: ${expA}
+B: ${expB}
+C: ${expC}
+D: ${expD}
+
+THINKING:
+1. Determine which concept or law the question is testing.
+2. Analyze how each choice reflects a different misconception or partial understanding.
+3. Compare the student's answer to the correct one and identify what reasoning gap leads to the mismatch.
+4. Focus on conceptual or causal reasoning (not memorization or formula recall).
+5. Consider what physical evidence, logical condition, or observable outcome could distinguish the correct reasoning from the mistaken one.
+
+IMPORTANT:
+1. Always identify the student's selected answer (highlighted or checked).
+2. The student's answer may be correct or incorrect.
+3. If the content is not a question, respond with:
+   > This is not a question.
+4. If the student's answer is correct, respond with:
+   > Nice work! No misconception to review.
+5. Base your analysis on conceptual reasoning, not test-taking strategy.
+6. Use contrastive phrasing to clarify "why not" for the wrong option (e.g., "If __ were true, then __ would not happen.").
+7. Keep the explanation concise, diagnostic, and student-facing.
+
+HINT:
+1. Use information from the THINKING or IMPORTANT sections to guide the student toward re-evaluating their reasoning.
+2. Avoid giving away the correct answer — focus on prompting deeper thought.
+3. Examples:
+   - "Try applying the principle from THINKING #1 — which law best explains this outcome?"
+   - "Look again at IMPORTANT #6 — what evidence would prove or disprove that assumption?"
+   - "If you tested this in a lab, what observation (from THINKING #5) would tell you which answer is right?"
+   - "Which variable or condition in the scenario actually changes the result?"
+
+If the student is incorrect, output your analysis in EXACTLY this format (no extra commentary):
+**Misconception**: [ONE clear, specific sentence explaining what the student falsely believes AND how to correctly tell or test the difference — focus on conceptual understanding, not procedural error.]
+`;
+```
+
+#### Prompt Structure Breakdown
+
+**1. Role Positioning**
+```
+You are an expert AI tutor analyzing a student's answer to identify and clarify misconceptions in the subject of ${subject}.
+```
+- Clearly defines AI's role as "tutor" not "answer machine"
+- `${subject}` dynamically injects subject name (e.g., AP Physics 2), enabling AI to use subject-specific terminology and frameworks
+
+**2. Input Fields**
+| Field | Source | Purpose |
+|-------|--------|---------|
+| `${content}` | Markdown extracted by Defuddle | Complete question content (with LaTeX) |
+| `${correctAnswer}` | DOM parsing (`.icon.--correct`) | Correct answer letter |
+| `${studentAnswer}` | DOM parsing (`aria-selected="true"`) | Student's selected answer |
+| `${expA/B/C/D}` | Extracted from `.LearnosityDistractor` | College Board official explanation for each option |
+| `${subject}` | URL parsing (`/(\d+)/` → mapping table) | AP subject name |
+
+**3. THINKING Framework**
+Guides AI through 5-step reasoning:
+1. Identify the tested concept/law
+2. Analyze misconceptions reflected by each choice
+3. Compare student's answer with correct answer
+4. Focus on conceptual understanding, not formula memorization
+5. Find observable/testable distinguishing points
+
+**4. IMPORTANT Rules**
+7 hard constraints:
+- Preflight check: Not a question → "This is not a question."
+- Correct answer → "Nice work! No misconception to review."
+- Output format: Only output `**Misconception**: ...` line
+- Language style: Contrastive phrasing ("If X, then Y would NOT happen")
+- Forbidden: Cannot reveal the correct answer letter
+
+**5. HINT Strategy**
+Socratic guidance:
+- Reference THINKING/IMPORTANT section numbers
+- Pose reflective questions, not answers
+- Example: "If you tested this in a lab, what would you observe?"
+
+#### Subject Variable Injection Mechanism
+
+**URL → Subject ID Mapping**
+```javascript
+// background.js
+function detectSubjectFromUrl(url) {
+  const match = url && url.match(/apclassroom\.collegeboard\.org\/(\d+)/);
+  const id = match ? match[1] : null;
+  
+  const map = {
+    '7': 'AP Chemistry',
+    '8': 'AP Computer Science A',
+    '11': 'AP Microeconomics',
+    '13': 'AP English Literature and Composition',
+    '26': 'AP Calculus BC',
+    '29': 'AP Physics C: Mechanics',
+    '30': 'AP Psychology',
+    '33': 'AP Statistics',
+    '78': 'AP Physics C: Electricity and Magnetism',
+    '93': 'AP Physics 2',
+    '94': 'AP Seminar',
+    '103': 'AP Computer Science Principles',
+    '117': 'AP Precalculus'
+  };
+  
+  return id && map[id] ? map[id] : 'Unknown';
+}
+```
+
+**Injection Timing**:
+1. Background detects URL → `detectSubjectFromUrl(tab.url)`
+2. Store in session storage → `chrome.storage.session.set({ subject })`
+3. Send to offscreen → `{ action: 'analyzeQuestion', subject, ... }`
+4. Insert into prompt → Template string substitution `${subject}`
+
+---
+
+### 4. College Board Explanations Extraction Flow
+
+#### DOM Structure Recognition
+```javascript
+// scripts/extract-content.js
+function extractRationales(document) {
+  const rationales = [];
+  
+  // 1. Find visible question container
+  const visibleRoot = findVisibleQuestionRoot(document);
+  
+  // 2. Find all options
+  const allOptions = visibleRoot.querySelectorAll('.mcq-option, .lrn-mcq-option');
+  
+  // 3. Extract explanation for each option
+  allOptions.forEach((option, index) => {
+    const distractor = option.closest('.LearnosityDistractor');
+    const contentEl = distractor?.querySelector('.content');
+    const text = contentEl?.textContent.trim();
+    
+    if (text) {
+      const letter = ['A', 'B', 'C', 'D', 'E'][index];
+      rationales.push({ answer: letter, rationale: text });
+    }
+  });
+  
+  return rationales;
+}
+```
+
+#### Mapping to A-D Variables
+```javascript
+// offscreen/offscreen.js
+const expA = rationales && rationales[0] ? rationales[0].rationale : 'None';
+const expB = rationales && rationales[1] ? rationales[1].rationale : 'None';
+const expC = rationales && rationales[2] ? rationales[2].rationale : 'None';
+const expD = rationales && rationales[3] ? rationales[3].rationale : 'None';
+```
+
+**Key Points**:
+- Map by index order (rationales[0] → A, rationales[1] → B, ...)
+- Fill 'None' when missing (some questions lack official explanations)
+- Preserve original text, no secondary processing
+
+---
+
+### 5. Structured Output Parsing
+
+#### Output Format Specification
+AI returns three possible outputs:
+
+**Case 1: Not a Question**
+```
+This is not a question.
+```
+
+**Case 2: Correct Answer**
+```
+Nice work! No misconception to review.
+```
+
+**Case 3: Incorrect Answer**
+```
+**Misconception**: If the magnet were removed, the paper clip would no longer attract others, so the clip is only temporarily magnetized rather than a permanent magnet.
+```
+
+#### Frontend Parsing Logic
+```javascript
+// content/analyzer-ui.js
+parseAnalysis(markdown) {
+  const analysis = {
+    studentAnswer: null,
+    correctAnswer: null,
+    misconception: null,
+    knowledgePoints: [],
+    fullText: markdown
+  };
+  
+  // Extract Misconception
+  const misconceptionMatch = markdown.match(/\*\*Misconception\*\*:\s*([^\n]+)/);
+  if (misconceptionMatch) {
+    analysis.misconception = misconceptionMatch[1].trim();
+  }
+  
+  return analysis;
+}
+```
+
+#### UI Rendering Strategy
+```javascript
+showAnalysis(markdown) {
+  // Handle special cases
+  if (markdown.trim() === 'This is not a question.') {
+    this.renderStatusAlert('neutral', 'No question detected', 
+      'Try selecting the full question on the page and click re-analyze.');
+    return;
+  }
+  
+  if (markdown.trim().startsWith('Nice work!')) {
+    this.renderStatusAlert('success', 'Analysis complete', 
+      'Your answer is correct. You can try another question.');
+    return;
+  }
+  
+  // Standard output: Highlight Misconception
+  const analysisData = this.parseAnalysis(markdown);
+  const html = `
+    <div class="qa-misconception-box">
+      <div class="qa-misconception-label">💡 Misconception Identified</div>
+      <div class="qa-misconception-text">${analysisData.misconception}</div>
+    </div>
+  `;
+  resultDiv.innerHTML = html;
+  renderLatexInElement(resultDiv); // Render LaTeX
+}
+```
+
+---
+
+### 6. Debug Mode & Logging System
+
+#### Enable Debug Mode
+```javascript
+// background.js
+const response = await chrome.runtime.sendMessage({
+  action: 'analyzeQuestion',
+  content: content,
+  debug: true  // Enable debug
+});
+
+if (response.debug) {
+  console.groupCollapsed('[AI Prompt]', url);
+  console.log('Subject:', subject);
+  console.log('Student Answer:', userAnswer, 'Correct Answer:', correctAnswer);
+  console.log('A–D Explanations:', {
+    A: response.debug.fields.expA,
+    B: response.debug.fields.expB,
+    C: response.debug.fields.expC,
+    D: response.debug.fields.expD
+  });
+  console.log('--- FULL PROMPT BEGIN ---');
+  console.log(response.debug.prompt);
+  console.log('--- FULL PROMPT END ---');
+  console.groupEnd();
+}
+```
+
+#### Debug Information Structure
+```javascript
+{
+  debug: {
+    prompt: "Complete prompt text...",
+    fields: {
+      subject: "AP Physics 2",
+      url: "https://apclassroom.collegeboard.org/93/...",
+      studentAnswer: "B",
+      correctAnswer: "A",
+      expA: "The magnet induces...",
+      expB: "The paper clip becomes...",
+      expC: "...",
+      expD: "..."
+    }
+  }
+}
+```
+
+**Use Cases**:
+- Verify subject detection correctness
+- Check if A-D explanations are fully extracted
+- Reproduce AI reasoning process
+- Debug prompt effectiveness
+
+---
+
+### 7. Error Handling & Fallback Strategies
+
+#### API Unavailable
+```javascript
+if (!('LanguageModel' in self)) {
+  throw new Error('LanguageModel API not available. Enable Gemini Nano in chrome://flags');
+}
+```
+→ Frontend displays: Guide user to enable Gemini Nano
+
+#### Session Creation Failure
+```javascript
+catch (error) {
+  session.destroy();
+  session = null;
+  throw error;
+}
+```
+→ Auto-retry creation next time
+
+#### Prompt Too Long
+- Currently no length limit check
+- Recommendation: Truncate question content to 4000 tokens (not implemented)
+
+#### Abnormal Output Format
+```javascript
+// Frontend fallback
+try {
+  const analysisData = this.parseAnalysis(markdown);
+  const html = this.buildAnalysisHTML(analysisData, markdown);
+} catch (e) {
+  // Fallback: Display raw Markdown
+  result.textContent = markdown;
+}
+```
+
+---
+
+## Other Core Features (Brief)
+
+### Subject Detection System
+- **Detection Method**: Regex match number ID in URL (`/apclassroom\.collegeboard\.org\/(\d+)/`)
+- **Supported Subjects**: 13 AP subjects (see mapping table)
+- **Default Value**: Returns 'Unknown' when not recognized
+
+### Cloud Feedback System
+- **Tech Stack**: Supabase (PostgreSQL)
+- **Features**:
+  - Submit helpful/not helpful feedback
+  - Community-recommended analyses (helpful ratio > 60% and total >= 3)
+  - Deduplicate by URL hash
+- **Privacy**: URLs are SHA-256 hashed, originals not stored
+
+### Misconception Deduplication Algorithm
+```javascript
+// utils/hash.js
+function buildFingerprint({ url, title, subject, studentAnswer, correctAnswer }) {
+  const base = `${url}|${title}|${subject}|${studentAnswer}|${correctAnswer}`;
+  return hashString(base); // FNV-1a hash
+}
+```
+- **Dedup Strategy**: Fingerprint first, fallback to analysisHash
+- **Merge Logic**: Same fingerprint misconceptions accumulate count
+
+### LaTeX Rendering Pipeline
+1. **Extract**: Turndown identifies `<img alt="LaTeX">` and `.math` elements
+2. **Convert**: Wrap in `$LaTeX$` or `$$LaTeX$$`
+3. **Render**: KaTeX.renderToString() → HTML
+4. **Secure**: DOMPurify.sanitize() filters XSS
+
+---
 
 ## Dependencies
 
-### Core Libraries
-- **Defuddle**: Content extraction and cleaning
-- **Turndown**: HTML to Markdown conversion
-- **Marked**: Markdown parsing and rendering
-- **KaTeX**: Mathematical formula rendering
-- **DOMPurify**: HTML sanitization
+| Library | Version | Purpose |
+|---------|---------|---------|
+| defuddle | 0.6.6 | Intelligent webpage content extraction |
+| turndown | 7.2.0 | HTML → Markdown |
+| marked | 14.1.2 | Markdown → HTML |
+| katex | 0.16.9 | LaTeX rendering |
+| dompurify | 3.2.4 | XSS protection |
+| @supabase/supabase-js | 2.39.3 | Cloud service |
 
-## Security & Privacy
+---
 
-- **Local Processing**: All AI analysis happens on-device using Chrome's LanguageModel API
-- **No External Calls**: No data is sent to external servers
-- **Content Sanitization**: All HTML content is sanitized with DOMPurify
-- **Data Persistence**: Analysis results are stored locally using Chrome's storage APIs
+## Chrome Version Requirements
 
-## Build Process
+- **Minimum Version**: Chrome 138+
+- **Required Features**:
+  - Manifest V3
+  - Offscreen Documents API
+  - LanguageModel API (Gemini Nano)
+- **How to Enable**:
+  1. Visit `chrome://flags`
+  2. Search "Prompt API for Gemini Nano"
+  3. Set to "Enabled"
+  4. Restart browser
 
-The extension uses Rollup for bundling:
+---
+
+## Build & Deployment
 
 ```bash
-npm run build
-```
+# Install dependencies
+npm install
 
-Built files are output to the `dist` folder for Chrome extension installation.
+# Build to dist/
+npm run build
+
+# Load extension
+# 1. Open chrome://extensions/
+# 2. Enable "Developer mode"
+# 3. Click "Load unpacked"
+# 4. Select dist/ folder
+```

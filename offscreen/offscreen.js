@@ -57,22 +57,49 @@ async function analyzeQuestion(content, context = {}) {
 
     // Build prompt with new template
     const prompt = `You are an expert AI tutor analyzing a student's answer to identify and clarify misconceptions in the subject of ${subject}.
+    
+    Question content:
+    ${content}
+    
+    Correct Answer: ${correctAnswer}
+    Student Answer: ${studentAnswer}
+    
+    College Board Explanation (for reference only):
+    A: ${expA}
+    B: ${expB}
+    C: ${expC}
+    D: ${expD}
+    
+    THINKING:
+  1. Determine which concept or law the question is testing.
+  2. Analyze how each choice reflects a different misconception or partial understanding.
+  3. Compare the student's answer to the correct one and identify what reasoning gap leads to the mismatch.
+  4. Focus on conceptual or causal reasoning (not memorization or formula recall).
+  5. Consider what physical evidence, logical condition, or observable outcome could distinguish the correct reasoning from the mistaken one.
 
-Question content:
-${content}
+  IMPORTANT:
+  1. Always identify the student’s selected answer (highlighted or checked).
+  2. The student’s answer may be correct or incorrect.
+  3. If the content is not a question, respond with:
+    > This is not a question.
+  4. If the student’s answer is correct, respond with:
+   > Nice work! No misconception to review.
+  5. Base your analysis on conceptual reasoning, not test-taking strategy.
+  6. Use contrastive phrasing to clarify “why not” for the wrong option (e.g., “If __ were true, then __ would not happen.”).
+  7. Keep the explanation concise, diagnostic, and student-facing.
 
-College Board Explanation (for reference only):
+  HINT:
+  1. Use information from the THINKING or IMPORTANT sections to guide the student toward re-evaluating their reasoning.
+  2. Avoid giving away the correct answer — focus on prompting deeper thought.
+  3. Examples:
+    - “Try applying the principle from THINKING #1 — which law best explains this outcome?”
+    - “Look again at IMPORTANT #6 — what evidence would prove or disprove that assumption?”
+    - “If you tested this in a lab, what observation (from THINKING #5 ) would tell you which answer is right?”
+    - “Which variable or condition in the scenario actually changes the result?”
 
-A: ${expA}
-B: ${expB}
-C: ${expC}
-D: ${expD}
-
-IMPORTANT: - Look for the student's selected answer (checked or highlighted choice). - The student’s answer may be correct or incorrect. - If the content is not a question, respond with: > This is not a question. - If the student’s answer is correct, respond with: > Nice work! No misconception to review. If the student is incorrect, output your analysis in EXACTLY this format (no extra commentary):
-
-**Misconception**: [ONE clear, specific sentence explaining what the student falsely believes AND how to correctly tell or test the difference — focus on conceptual understanding, not procedural error.]  
-
-Guidelines for Misconception: - Be direct, student-facing, and conceptual. - Avoid any mention of “the student thought,” “the student misunderstood,” or “the wrong answer.” - Use comparative or diagnostic phrasing that helps the student distinguish ideas: - “If there were no __, then __ would not happen, so __.” - “__ only occurs when __, not when __.” - “__ does not act on its own; it’s temporarily affected by __.” - Prioritize physical reasoning or testable cues that help students *self-correct* next time. Use LaTeX $...$ for any math expressions.`;
+  If the student is incorrect, output your analysis in EXACTLY this format (no extra commentary):
+      **Misconception**: [ONE clear, specific sentence explaining what the student falsely believes AND how to correctly tell or test the difference — focus on conceptual understanding, not procedural error.]  
+  `;
 
     if (debug) {
       console.log('\n[AI PROMPT BEGIN]\n' + prompt + '\n[AI PROMPT END]\n');

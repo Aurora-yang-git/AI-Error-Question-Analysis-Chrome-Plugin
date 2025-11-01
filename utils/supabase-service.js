@@ -1,11 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
-import { supabaseConfig } from '../supabase-config.js';
 
 let supabase = null;
 let userId = null;
+let supabaseConfig = null;
+
+// Try to import Supabase config, but don't fail if it doesn't exist
+try {
+  const configModule = await import('../supabase-config.js');
+  supabaseConfig = configModule.supabaseConfig;
+} catch (error) {
+  console.log('Supabase config not found. Running in local-only mode.');
+}
 
 export async function initSupabase() {
   if (supabase) return supabase;
+  
+  if (!supabaseConfig || !supabaseConfig.url || !supabaseConfig.anonKey) {
+    throw new Error('Supabase not configured');
+  }
   
   supabase = createClient(supabaseConfig.url, supabaseConfig.anonKey);
   userId = await generateUserId();
